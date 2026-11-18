@@ -8,6 +8,7 @@
 #
 # Usage: scripts/smoke-test.sh <image>      (DOCKER=podman to use podman; needs jq)
 set -euo pipefail
+trap 'echo "smoke: FAIL command failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 image="${1:?usage: smoke-test.sh <image>}"
 docker="${DOCKER:-docker}"
@@ -65,7 +66,8 @@ version="$($docker exec "$tag-a" syncthing --version)"
 grep -qF "syncthing $want_version " <<<"$version" || { echo "smoke: FAIL version '$version', expected $want_version"; exit 1; }
 grep -q "modernc-sqlite" <<<"$version" && { echo "smoke: FAIL built without cgo (modernc-sqlite), upstream uses mattn/go-sqlite3"; exit 1; }
 uid_a="$($docker exec "$tag-a" sh -c 'stat -c %u /proc/1')"
-uid_b="$($docker top "$tag-b" -eo uid,args 2>/dev/null | awk '/syncthing/ && !/entrypoint/ {print $1; exit}')"
+# The entrypoint execs su-exec, which execs syncthing, so syncthing is PID 1 in both containers.
+uid_b="$($docker exec "$tag-b" sh -c 'stat -c %u /proc/1')"
 [ "$uid_a" = 22000 ] || { echo "smoke: FAIL A runs as uid $uid_a, expected 22000"; exit 1; }
 [ "$uid_b" = 1000 ] || { echo "smoke: FAIL B (default mode) runs as uid '$uid_b', expected 1000"; exit 1; }
 echo "smoke: ${version%% (*}; A uid 22000 (hardened), B uid 1000 (default su-exec)"
