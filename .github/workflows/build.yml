@@ -101,9 +101,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push
+      # `docker push` sends OCI manifests, and podman ignores HEALTHCHECK in OCI images. skopeo
+      # copies each tag as a Docker v2 schema 2 manifest, which keeps the health check for podman.
+      - name: Push (Docker v2 manifests)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        run: docker push --all-tags "$IMAGE"
+        run: |
+          for ref in $(docker image ls "$IMAGE" --format '{{.Repository}}:{{.Tag}}'); do
+            skopeo copy --format v2s2 "docker-daemon:$ref" "docker://$ref"
+          done
+
+      - name: Check pushed manifest keeps the health check
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          skopeo inspect --raw "docker://$IMAGE:latest-hardened" \
+            | jq -e '.mediaType == "application/vnd.docker.distribution.manifest.v2+json"' >/dev/null
+          skopeo inspect --raw --config "docker://$IMAGE:latest-hardened" | jq -e '.config.Healthcheck.Test' >/dev/null
 
       - name: Ping Healthchecks.io
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && env.HC_PING_URL != ''
