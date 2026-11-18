@@ -1,0 +1,48 @@
+name: Watch upstream releases
+
+on:
+  schedule:
+    - cron: '11 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Open PR for a new upstream release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current="$(tr -d '[:space:]' < UPSTREAM_VERSION)"
+          # `gh release view` without a tag returns the latest non-prerelease release.
+          latest="$(gh release view -R syncthing/syncthing --json tagName -q .tagName)"
+          echo "current=$current latest=$latest"
+          [ "$current" != "$latest" ] || { echo "up to date"; exit 0; }
+
+          branch="upstream/$latest"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "branch $branch already exists"; exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          echo "$latest" > UPSTREAM_VERSION
+          git commit -am "Bump upstream syncthing to $latest"
+          git push origin "$branch"
+
+          gh pr create --base main --head "$branch" \
+            --title "Bump upstream syncthing to $latest" \
+            --body "Upstream release notes: https://github.com/syncthing/syncthing/releases/tag/$latest
+
+          The build workflow has been dispatched on this branch (PRs opened with GITHUB_TOKEN do not trigger it on their own). If prepare fails on an anchor, upstream changed its build: review overlay/Dockerfile against upstream's Dockerfile first. Merge when it is green; merging publishes \`$latest-hardened\` and \`latest-hardened\`."
+
+          # Events from GITHUB_TOKEN don't start workflows, but workflow_dispatch does.
+          gh workflow run build.yml --ref "$branch"

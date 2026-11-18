@@ -1,0 +1,11 @@
+# Go modules raised to their latest release (same major version) before building
+# syncthing. A module is only touched if the binary already depends on it.
+# quic-go and golang.org/x/exp are deliberately not listed: they make breaking changes
+# between releases. Add one only if Trivy flags it and the bump still builds.
+golang.org/x/crypto
+golang.org/x/net
+golang.org/x/text
+golang.org/x/sys
+golang.org/x/time
+golang.org/x/sync
+google.golang.org/protobuf

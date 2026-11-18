@@ -1,0 +1,4 @@
+# Accepted findings for the hardened image. Every entry needs a reason, a package URL
+# scope and an expiry date; when it expires the build fails again and the entry must be
+# re-reviewed. Format: https://trivy.dev/latest/docs/configuration/filtering/#trivyignoreyaml
+vulnerabilities: []
