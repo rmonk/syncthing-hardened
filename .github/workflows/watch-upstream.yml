@@ -28,21 +28,25 @@ jobs:
 
           branch="upstream/$latest"
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
-            echo "branch $branch already exists"; exit 0
+            # --state all: a closed PR means the bump was rejected; do not reopen it.
+            if [ -n "$(gh pr list --head "$branch" --state all --json number -q '.[].number')" ]; then
+              echo "branch $branch already has a PR"; exit 0
+            fi
+            echo "branch $branch exists without a PR (an earlier run failed); finishing it"
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git switch -c "$branch"
+            echo "$latest" > UPSTREAM_VERSION
+            git commit -am "Bump upstream syncthing to $latest"
+            git push origin "$branch"
           fi
 
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
-          echo "$latest" > UPSTREAM_VERSION
-          git commit -am "Bump upstream syncthing to $latest"
-          git push origin "$branch"
+          # Events from GITHUB_TOKEN don't start workflows, but workflow_dispatch does.
+          gh workflow run build.yml --ref "$branch"
 
           gh pr create --base main --head "$branch" \
             --title "Bump upstream syncthing to $latest" \
             --body "Upstream release notes: https://github.com/syncthing/syncthing/releases/tag/$latest
 
           The build workflow has been dispatched on this branch (PRs opened with GITHUB_TOKEN do not trigger it on their own). If prepare fails on an anchor, upstream changed its build: review overlay/Dockerfile against upstream's Dockerfile first. Merge when it is green; merging publishes \`$latest-hardened\` and \`latest-hardened\`."
-
-          # Events from GITHUB_TOKEN don't start workflows, but workflow_dispatch does.
-          gh workflow run build.yml --ref "$branch"
